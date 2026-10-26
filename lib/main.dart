@@ -224,7 +224,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
     setState(() {
       _running = true;
-      _output = 'Запуск ${_fileName}...';
+      _output = 'Запуск $_fileName...';
     });
 
     try {
