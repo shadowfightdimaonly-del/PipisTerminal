@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:serious_python/serious_python.dart';
@@ -59,15 +61,107 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Timer? _statusTimer;
   bool _pythonReady = false;
   bool _running = false;
+  bool _dirty = false;
+  String? _filePath;
   String _output = 'PipisTerminal\nГотовлю Python...';
 
   Uri get _runUri => Uri.parse('http://127.0.0.1:$_pythonPort/run');
   Uri get _healthUri => Uri.parse('http://127.0.0.1:$_pythonPort/health');
 
+  String get _fileName => _filePath == null
+      ? 'Новый файл'
+      : _filePath!.split(Platform.pathSeparator).last;
+
   @override
   void initState() {
     super.initState();
+    _controller.addListener(_markDirty);
     _startPython();
+  }
+
+  void _markDirty() {
+    if (mounted && !_dirty) {
+      setState(() {
+        _dirty = true;
+      });
+    }
+  }
+
+  Future<void> _openFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['py'],
+      );
+      if (result == null || result.files.single.path == null) return;
+
+      final path = result.files.single.path!;
+      final content = await File(path).readAsString();
+
+      _controller.removeListener(_markDirty);
+      _controller.text = content;
+      _controller.selection = TextSelection.collapsed(offset: content.length);
+      _controller.addListener(_markDirty);
+
+      if (mounted) {
+        setState(() {
+          _filePath = path;
+          _dirty = false;
+          _output = 'Открыт файл:\n$_fileName';
+        });
+      }
+    } catch (error) {
+      _showMessage('Не удалось открыть файл:\n$error');
+    }
+  }
+
+  Future<void> _saveFile() async {
+    if (_filePath == null) {
+      await _saveAs();
+      return;
+    }
+
+    try {
+      await File(_filePath!).writeAsString(_controller.text);
+      if (mounted) {
+        setState(() {
+          _dirty = false;
+          _output = 'Сохранено:\n$_fileName';
+        });
+      }
+    } catch (error) {
+      _showMessage('Не удалось сохранить файл:\n$error');
+    }
+  }
+
+  Future<void> _saveAs() async {
+    try {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Сохранить Python-файл',
+        fileName: _filePath == null ? 'main.py' : _fileName,
+        type: FileType.custom,
+        allowedExtensions: ['py'],
+      );
+      if (path == null) return;
+
+      await File(path).writeAsString(_controller.text);
+      if (mounted) {
+        setState(() {
+          _filePath = path;
+          _dirty = false;
+          _output = 'Сохранено как:\n$_fileName';
+        });
+      }
+    } catch (error) {
+      _showMessage('Не удалось сохранить файл:\n$error');
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   void _startPython() {
@@ -110,7 +204,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
     setState(() {
       _running = true;
-      _output = 'Запуск...';
+      _output = 'Запуск ${_fileName}...';
     });
 
     try {
@@ -167,6 +261,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   @override
   void dispose() {
     _statusTimer?.cancel();
+    _controller.removeListener(_markDirty);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -177,10 +272,36 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF15121A),
-        title: const Text('PipisTerminal'),
+        titleSpacing: 12,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('PipisTerminal'),
+            Text(
+              '${_dirty ? '● ' : ''}$_fileName',
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            tooltip: 'Открыть .py',
+            onPressed: _openFile,
+            icon: const Icon(Icons.folder_open),
+          ),
+          IconButton(
+            tooltip: 'Сохранить',
+            onPressed: _saveFile,
+            icon: const Icon(Icons.save),
+          ),
+          IconButton(
+            tooltip: 'Сохранить как',
+            onPressed: _saveAs,
+            icon: const Icon(Icons.save_as),
+          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Center(
               child: Row(
                 children: [
