@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -161,7 +162,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         fileName: suggestedName,
         type: FileType.custom,
         allowedExtensions: ['py'],
-        bytes: utf8.encode(_controller.text),
+        bytes: Uint8List.fromList(utf8.encode(_controller.text)),
       );
       if (path == null) return;
 
