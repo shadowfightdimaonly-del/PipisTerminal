@@ -1,13 +1,19 @@
 import io
 import json
+import os
 import shlex
 import sys
+import threading
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "127.0.0.1"
 PORT = 8765
+
+# exec(), stdout/stderr redirection, sys.argv and cwd are process-global.
+# Serialize executions so two requests cannot corrupt one another's state.
+RUN_LOCK = threading.Lock()
 
 
 def send_json(handler, status, payload):
@@ -49,6 +55,7 @@ class Handler(BaseHTTPRequestHandler):
             code = request.get("code", "")
             file_name = request.get("fileName", "<PipisTerminal>")
             raw_args = request.get("args", "")
+            requested_cwd = request.get("cwd")
 
             if not isinstance(code, str):
                 raise ValueError("code must be a string")
@@ -56,10 +63,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("fileName must be a non-empty string")
             if not isinstance(raw_args, str):
                 raise ValueError("args must be a string")
+            if requested_cwd is not None and not isinstance(requested_cwd, str):
+                raise ValueError("cwd must be a string or null")
+
             args = shlex.split(raw_args)
-        except ValueError as exc:
-            send_json(self, 400, {"error": str(exc)})
-            return
+            if requested_cwd:
+                if not os.path.isdir(requested_cwd):
+                    raise ValueError("Рабочая папка не найдена: " + requested_cwd)
         except Exception as exc:
             send_json(self, 400, {"error": str(exc)})
             return
@@ -67,26 +77,39 @@ class Handler(BaseHTTPRequestHandler):
         stdout = io.StringIO()
         stderr = io.StringIO()
         exit_code = 0
-        namespace = {
-            "__name__": "__main__",
-            "__file__": file_name,
-        }
-        original_argv = sys.argv
 
         try:
-            sys.argv = [file_name, *args]
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                exec(compile(code, file_name, "exec"), namespace, namespace)
-        except SystemExit as exc:
-            value = exc.code
-            exit_code = value if isinstance(value, int) else 0
-            if value not in (None, 0):
-                print(value, file=stderr)
-        except BaseException:
+            with RUN_LOCK:
+                original_argv = sys.argv
+                original_cwd = os.getcwd()
+                namespace = {
+                    "__name__": "__main__",
+                    "__file__": file_name,
+                }
+
+                try:
+                    if requested_cwd:
+                        os.chdir(requested_cwd)
+                    sys.argv = [file_name, *args]
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        exec(compile(code, file_name, "exec"), namespace, namespace)
+                except SystemExit as exc:
+                    value = exc.code
+                    exit_code = value if isinstance(value, int) else 0
+                    if value not in (None, 0):
+                        print(value, file=stderr)
+                except BaseException:
+                    exit_code = 1
+                    traceback.print_exc(file=stderr)
+                finally:
+                    sys.argv = original_argv
+                    try:
+                        os.chdir(original_cwd)
+                    except OSError:
+                        pass
+        except Exception as exc:
             exit_code = 1
-            traceback.print_exc(file=stderr)
-        finally:
-            sys.argv = original_argv
+            stderr.write("Не удалось подготовить запуск: " + str(exc) + "\\n")
 
         send_json(
             self,
@@ -97,6 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                 "exitCode": exit_code,
                 "fileName": file_name,
                 "args": args,
+                "cwd": requested_cwd,
             },
         )
 
