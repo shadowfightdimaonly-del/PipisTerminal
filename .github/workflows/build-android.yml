@@ -37,7 +37,7 @@ jobs:
           # Flutter generates a counter-app test that references the nonexistent MyApp.
           rm -f test/widget_test.dart
 
-      - name: Set Android minimum SDK to 23
+      - name: Set Android SDK versions
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -46,6 +46,10 @@ jobs:
               path = Path(filename)
               if path.exists():
                   content = path.read_text()
+                  # serious_python_android requires compileSdk 36; file_picker's
+                  # Android lifecycle dependency enforces the same minimum.
+                  content = content.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+                  content = content.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 36')
                   content = content.replace('minSdk = flutter.minSdkVersion', 'minSdk = 23')
                   content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 23')
                   path.write_text(content)
