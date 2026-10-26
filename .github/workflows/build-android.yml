@@ -1,0 +1,78 @@
+name: Build PipisTerminal APK
+
+on:
+  push:
+    branches:
+      - pipisedit-file-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project files
+        run: |
+          flutter create --platforms=android --org com.pipis.pipisterminal .
+          # Flutter generates a counter-app test that references the nonexistent MyApp.
+          rm -f test/widget_test.dart
+
+      - name: Set Android minimum SDK to 23
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for filename in ('android/app/build.gradle', 'android/app/build.gradle.kts'):
+              path = Path(filename)
+              if path.exists():
+                  content = path.read_text()
+                  content = content.replace('minSdk = flutter.minSdkVersion', 'minSdk = 23')
+                  content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 23')
+                  path.write_text(content)
+          PY
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Package embedded Python
+        env:
+          SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/build/site-packages
+          SERIOUS_PYTHON_APP: ${{ github.workspace }}/build/app
+        run: dart run serious_python:main package app/src -p Android
+
+      - name: Analyze Flutter project
+        run: flutter analyze
+
+      - name: Build release APKs
+        env:
+          SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/build/site-packages
+          SERIOUS_PYTHON_APP: ${{ github.workspace }}/build/app
+        run: flutter build apk --release --split-per-abi
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PipisTerminal-Android-APKs
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
