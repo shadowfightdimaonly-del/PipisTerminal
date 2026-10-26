@@ -55,7 +55,7 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> {
   final _controller = TextEditingController(
-    text: 'print("Привет из PipisTerminal!")\\n',
+    text: 'print("Привет из PipisTerminal!")\n',
   );
   final _argsController = TextEditingController();
   final _scrollController = ScrollController();
@@ -66,7 +66,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   bool _dirty = false;
   String? _filePath;
   String? _workingDirectory;
-  String _output = 'PipisTerminal\\nГотовлю Python...';
+  String _output = 'PipisTerminal\nГотовлю Python...';
 
   Uri get _runUri => Uri.parse('http://127.0.0.1:$_pythonPort/run');
   Uri get _healthUri => Uri.parse('http://127.0.0.1:$_pythonPort/health');
@@ -111,11 +111,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
           _filePath = path;
           _workingDirectory = File(path).parent.path;
           _dirty = false;
-          _output = 'Открыт файл:\\n$_fileName';
+          _output = 'Открыт файл:\n$_fileName';
         });
       }
     } catch (error) {
-      _showMessage('Не удалось открыть файл:\\n$error');
+      _showMessage('Не удалось открыть файл:\n$error');
     }
   }
 
@@ -128,10 +128,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
       setState(() {
         _workingDirectory = path;
-        _output = 'Рабочая папка:\\n$path';
+        _output = 'Рабочая папка:\n$path';
       });
     } catch (error) {
-      _showMessage('Не удалось выбрать папку:\\n$error');
+      _showMessage('Не удалось выбрать папку:\n$error');
     }
   }
 
@@ -146,11 +146,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (mounted) {
         setState(() {
           _dirty = false;
-          _output = 'Сохранено:\\n$_fileName';
+          _output = 'Сохранено:\n$_fileName';
         });
       }
     } catch (error) {
-      _showMessage('Не удалось сохранить файл:\\n$error');
+      _showMessage('Не удалось сохранить файл:\n$error');
     }
   }
 
@@ -183,7 +183,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
           _workingDirectory =
               localPath == null ? null : File(localPath).parent.path;
           _dirty = false;
-          _output = 'Файл экспортирован: undefined';
+          _output = 'Файл экспортирован: $suggestedName';
         });
       }
     } catch (error) {
@@ -200,9 +200,17 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   int _pythonChecks = 0;
 
-  void _startPython() {
+  Future<void> _startPython() async {
+    if (mounted) {
+      setState(() {
+        _output = 'Подготавливаю встроенный Python…';
+      });
+    }
+
     try {
-      // Surface asynchronous failures instead of leaving the status at "Запуск".
+      // On Android, SeriousPython must unpack its bundled app/runtime on first
+      // launch. Wait for that step and surface failures instead of spinning forever.
+      await SeriousPython.prepareApp().timeout(const Duration(seconds: 60));
       unawaited(
         SeriousPython.run().catchError((Object error, StackTrace stack) {
           if (mounted) {
@@ -214,9 +222,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
         }),
       );
     } catch (error) {
-      setState(() {
-        _output = 'Не удалось запустить Python:\n$error';
-      });
+      if (mounted) {
+        setState(() {
+          _output = 'Не удалось подготовить встроенный Python:\n$error';
+        });
+      }
       return;
     }
 
@@ -235,7 +245,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         if (!_pythonReady) {
           setState(() {
             _pythonReady = true;
-            _output = 'Python 3\\nГотов к запуску.';
+            _output = 'Python 3\nГотов к запуску.';
           });
         }
         _statusTimer?.cancel();
@@ -278,7 +288,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
       if (response.statusCode != 200) {
         setState(() {
-          _output = 'Python server error ${response.statusCode}\\n${response.body}';
+          _output = 'Python server error ${response.statusCode}\n${response.body}';
         });
         return;
       }
@@ -293,15 +303,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (stderr.isNotEmpty) parts.add(stderr.trimRight());
       if (parts.isEmpty) parts.add('[Program finished]');
       if (exitCode != null && exitCode != 0) {
-        parts.add('\\nExit code: $exitCode');
+        parts.add('\nExit code: $exitCode');
       }
 
       setState(() {
-        _output = parts.join('\\n');
+        _output = parts.join('\n');
       });
     } catch (error) {
       setState(() {
-        _output = 'Ошибка запуска:\\n$error';
+        _output = 'Ошибка запуска:\n$error';
       });
     } finally {
       if (mounted) {
@@ -314,7 +324,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   void _clearOutput() {
     setState(() {
-      _output = _pythonReady ? 'Python 3\\nГотов к запуску.' : 'Готовлю Python...';
+      _output = _pythonReady ? 'Python 3\nГотов к запуску.' : 'Готовлю Python...';
     });
   }
 
@@ -347,24 +357,42 @@ class _TerminalScreenState extends State<TerminalScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Открыть .py',
+            tooltip: 'Открыть файл Python',
             onPressed: _openFile,
             icon: const Icon(Icons.folder_open),
           ),
           IconButton(
-            tooltip: 'Рабочая папка проекта',
-            onPressed: _chooseWorkingDirectory,
-            icon: const Icon(Icons.folder_copy_outlined),
-          ),
-          IconButton(
-            tooltip: 'Сохранить',
+            tooltip: 'Сохранить файл',
             onPressed: _saveFile,
             icon: const Icon(Icons.save),
           ),
-          IconButton(
-            tooltip: 'Сохранить как',
-            onPressed: _saveAs,
-            icon: const Icon(Icons.save_as),
+          PopupMenuButton<String>(
+            tooltip: 'Дополнительные действия',
+            onSelected: (action) {
+              if (action == 'save_as') {
+                _saveAs();
+              } else if (action == 'working_directory') {
+                _chooseWorkingDirectory();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'save_as',
+                child: ListTile(
+                  leading: Icon(Icons.save_as),
+                  title: Text('Сохранить как…'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'working_directory',
+                child: ListTile(
+                  leading: Icon(Icons.folder_copy_outlined),
+                  title: Text('Выбрать папку проекта…'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
