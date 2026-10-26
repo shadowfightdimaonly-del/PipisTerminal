@@ -1,7 +1,7 @@
 name: pipis_terminal
 description: PipisTerminal, a local Python coding terminal for Android.
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
