@@ -210,6 +210,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
               _output = 'Не удалось запустить Python:\n$error';
             });
           }
+          return null;
         }),
       );
     } catch (error) {
