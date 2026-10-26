@@ -5,7 +5,7 @@ workflows:
     environment:
       flutter: stable
       vars:
-        SERIOUS_PYTHON_VERSION: 3.13
+        SERIOUS_PYTHON_VERSION: "3.13"
     scripts:
       - name: Prepare Flutter Android project
         script: |
@@ -14,17 +14,13 @@ workflows:
         script: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('android/app/build.gradle')
-          if path.exists():
-              text = path.read_text()
-              text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 23')
-              text = text.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 23')
-              path.write_text(text)
-          path_kts = Path('android/app/build.gradle.kts')
-          if path_kts.exists():
-              text = path_kts.read_text()
-              text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 23')
-              path_kts.write_text(text)
+          for filename in ('android/app/build.gradle', 'android/app/build.gradle.kts'):
+              path = Path(filename)
+              if path.exists():
+                  text = path.read_text()
+                  text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 23')
+                  text = text.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 23')
+                  path.write_text(text)
           PY
       - name: Get Flutter packages
         script: flutter pub get
@@ -36,6 +32,9 @@ workflows:
       - name: Analyze
         script: flutter analyze
       - name: Build APK
-        script: flutter build apk --release --split-per-abi
+        script: |
+          export SERIOUS_PYTHON_SITE_PACKAGES="$CM_BUILD_DIR/build/site-packages"
+          export SERIOUS_PYTHON_APP="$CM_BUILD_DIR/build/app"
+          flutter build apk --release --split-per-abi
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
