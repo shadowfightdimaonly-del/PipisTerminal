@@ -54,7 +54,7 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> {
   final _controller = TextEditingController(
-    text: 'print("Привет из PipisTerminal!")\n',
+    text: 'print("Привет из PipisTerminal!")\\n',
   );
   final _argsController = TextEditingController();
   final _scrollController = ScrollController();
@@ -64,7 +64,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   bool _running = false;
   bool _dirty = false;
   String? _filePath;
-  String _output = 'PipisTerminal\nГотовлю Python...';
+  String? _workingDirectory;
+  String _output = 'PipisTerminal\\nГотовлю Python...';
 
   Uri get _runUri => Uri.parse('http://127.0.0.1:$_pythonPort/run');
   Uri get _healthUri => Uri.parse('http://127.0.0.1:$_pythonPort/health');
@@ -107,12 +108,29 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (mounted) {
         setState(() {
           _filePath = path;
+          _workingDirectory = File(path).parent.path;
           _dirty = false;
-          _output = 'Открыт файл:\n$_fileName';
+          _output = 'Открыт файл:\\n$_fileName';
         });
       }
     } catch (error) {
-      _showMessage('Не удалось открыть файл:\n$error');
+      _showMessage('Не удалось открыть файл:\\n$error');
+    }
+  }
+
+  Future<void> _chooseWorkingDirectory() async {
+    try {
+      final path = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Выбрать рабочую папку проекта',
+      );
+      if (path == null || !mounted) return;
+
+      setState(() {
+        _workingDirectory = path;
+        _output = 'Рабочая папка:\\n$path';
+      });
+    } catch (error) {
+      _showMessage('Не удалось выбрать папку:\\n$error');
     }
   }
 
@@ -127,11 +145,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (mounted) {
         setState(() {
           _dirty = false;
-          _output = 'Сохранено:\n$_fileName';
+          _output = 'Сохранено:\\n$_fileName';
         });
       }
     } catch (error) {
-      _showMessage('Не удалось сохранить файл:\n$error');
+      _showMessage('Не удалось сохранить файл:\\n$error');
     }
   }
 
@@ -149,12 +167,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (mounted) {
         setState(() {
           _filePath = path;
+          _workingDirectory = File(path).parent.path;
           _dirty = false;
-          _output = 'Сохранено как:\n$_fileName';
+          _output = 'Сохранено как:\\n$_fileName';
         });
       }
     } catch (error) {
-      _showMessage('Не удалось сохранить файл:\n$error');
+      _showMessage('Не удалось сохранить файл:\\n$error');
     }
   }
 
@@ -170,7 +189,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       SeriousPython.run();
     } catch (error) {
       setState(() {
-        _output = 'Не удалось запустить Python:\n$error';
+        _output = 'Не удалось запустить Python:\\n$error';
       });
       return;
     }
@@ -190,7 +209,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         if (!_pythonReady) {
           setState(() {
             _pythonReady = true;
-            _output = 'Python 3\nГотов к запуску.';
+            _output = 'Python 3\\nГотов к запуску.';
           });
         }
         _statusTimer?.cancel();
@@ -215,15 +234,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
             headers: {'content-type': 'application/json'},
             body: jsonEncode({
               'code': _controller.text,
-              'fileName': _fileName,
+              'fileName': _filePath ?? '<PipisTerminal>',
               'args': _argsController.text,
+              'cwd': _workingDirectory,
             }),
           )
           .timeout(const Duration(seconds: 30));
 
       if (response.statusCode != 200) {
         setState(() {
-          _output = 'Python server error ${response.statusCode}\n${response.body}';
+          _output = 'Python server error ${response.statusCode}\\n${response.body}';
         });
         return;
       }
@@ -238,15 +258,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (stderr.isNotEmpty) parts.add(stderr.trimRight());
       if (parts.isEmpty) parts.add('[Program finished]');
       if (exitCode != null && exitCode != 0) {
-        parts.add('\nExit code: $exitCode');
+        parts.add('\\nExit code: $exitCode');
       }
 
       setState(() {
-        _output = parts.join('\n');
+        _output = parts.join('\\n');
       });
     } catch (error) {
       setState(() {
-        _output = 'Ошибка запуска:\n$error';
+        _output = 'Ошибка запуска:\\n$error';
       });
     } finally {
       if (mounted) {
@@ -259,7 +279,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   void _clearOutput() {
     setState(() {
-      _output = _pythonReady ? 'Python 3\nГотов к запуску.' : 'Готовлю Python...';
+      _output = _pythonReady ? 'Python 3\\nГотов к запуску.' : 'Готовлю Python...';
     });
   }
 
@@ -295,6 +315,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
             tooltip: 'Открыть .py',
             onPressed: _openFile,
             icon: const Icon(Icons.folder_open),
+          ),
+          IconButton(
+            tooltip: 'Рабочая папка проекта',
+            onPressed: _chooseWorkingDirectory,
+            icon: const Icon(Icons.folder_copy_outlined),
           ),
           IconButton(
             tooltip: 'Сохранить',
@@ -333,11 +358,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 controller: _argsController,
                 maxLines: 1,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Аргументы командной строки',
                   hintText: 'например: hello "hello world"',
-                  prefixIcon: Icon(Icons.terminal),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  helperText: _workingDirectory == null
+                      ? 'Рабочая папка не выбрана'
+                      : 'Папка: $_workingDirectory',
+                  helperMaxLines: 1,
+                  prefixIcon: const Icon(Icons.terminal),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
