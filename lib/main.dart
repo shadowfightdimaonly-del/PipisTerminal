@@ -56,6 +56,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   final _controller = TextEditingController(
     text: 'print("Привет из PipisTerminal!")\n',
   );
+  final _argsController = TextEditingController();
   final _scrollController = ScrollController();
 
   Timer? _statusTimer;
@@ -212,7 +213,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
           .post(
             _runUri,
             headers: {'content-type': 'application/json'},
-            body: jsonEncode({'code': _controller.text}),
+            body: jsonEncode({
+              'code': _controller.text,
+              'fileName': _fileName,
+              'args': _argsController.text,
+            }),
           )
           .timeout(const Duration(seconds: 30));
 
@@ -263,6 +268,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _statusTimer?.cancel();
     _controller.removeListener(_markDirty);
     _controller.dispose();
+    _argsController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -321,10 +327,24 @@ class _TerminalScreenState extends State<TerminalScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+              child: TextField(
+                controller: _argsController,
+                maxLines: 1,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+                decoration: const InputDecoration(
+                  labelText: 'Аргументы командной строки',
+                  hintText: 'например: hello "hello world"',
+                  prefixIcon: Icon(Icons.terminal),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ),
             Expanded(
               flex: 6,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
                 child: TextField(
                   controller: _controller,
                   expands: true,
