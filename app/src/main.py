@@ -1,5 +1,6 @@
 import io
 import json
+import shlex
 import sys
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
@@ -46,8 +47,19 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(length)
             request = json.loads(body.decode("utf-8"))
             code = request.get("code", "")
+            file_name = request.get("fileName", "<PipisTerminal>")
+            raw_args = request.get("args", "")
+
             if not isinstance(code, str):
                 raise ValueError("code must be a string")
+            if not isinstance(file_name, str) or not file_name.strip():
+                raise ValueError("fileName must be a non-empty string")
+            if not isinstance(raw_args, str):
+                raise ValueError("args must be a string")
+            args = shlex.split(raw_args)
+        except ValueError as exc:
+            send_json(self, 400, {"error": str(exc)})
+            return
         except Exception as exc:
             send_json(self, 400, {"error": str(exc)})
             return
@@ -55,11 +67,16 @@ class Handler(BaseHTTPRequestHandler):
         stdout = io.StringIO()
         stderr = io.StringIO()
         exit_code = 0
-        namespace = {"__name__": "__main__"}
+        namespace = {
+            "__name__": "__main__",
+            "__file__": file_name,
+        }
+        original_argv = sys.argv
 
         try:
+            sys.argv = [file_name, *args]
             with redirect_stdout(stdout), redirect_stderr(stderr):
-                exec(compile(code, "<PipisTerminal>", "exec"), namespace, namespace)
+                exec(compile(code, file_name, "exec"), namespace, namespace)
         except SystemExit as exc:
             value = exc.code
             exit_code = value if isinstance(value, int) else 0
@@ -68,6 +85,8 @@ class Handler(BaseHTTPRequestHandler):
         except BaseException:
             exit_code = 1
             traceback.print_exc(file=stderr)
+        finally:
+            sys.argv = original_argv
 
         send_json(
             self,
@@ -76,6 +95,8 @@ class Handler(BaseHTTPRequestHandler):
                 "stdout": stdout.getvalue(),
                 "stderr": stderr.getvalue(),
                 "exitCode": exit_code,
+                "fileName": file_name,
+                "args": args,
             },
         )
 
