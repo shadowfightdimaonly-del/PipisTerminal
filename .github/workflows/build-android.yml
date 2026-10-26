@@ -45,6 +45,19 @@ jobs:
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           content = manifest.read_text()
+          # Release builds need INTERNET permission too; Flutter's generated
+          # debug manifest is not enough for the local Python HTTP bridge.
+          if 'android.permission.INTERNET' not in content:
+              content = content.replace(
+                  '<manifest ',
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android" ',
+                  1,
+              ) if 'xmlns:android=' not in content.split('>', 1)[0] else content
+              content = content.replace(
+                  '<application',
+                  '<uses-permission android:name="android.permission.INTERNET" />\\n    <application',
+                  1,
+              )
           if 'android:usesCleartextTraffic=' in content:
               content = re.sub(
                   r'android:usesCleartextTraffic="[^"]*"',
