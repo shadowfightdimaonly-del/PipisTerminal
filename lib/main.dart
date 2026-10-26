@@ -155,25 +155,38 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   Future<void> _saveAs() async {
     try {
+      final suggestedName = _filePath == null ? 'main.py' : _fileName;
       final path = await FilePicker.platform.saveFile(
         dialogTitle: 'Сохранить Python-файл',
-        fileName: _filePath == null ? 'main.py' : _fileName,
+        fileName: suggestedName,
         type: FileType.custom,
         allowedExtensions: ['py'],
+        bytes: utf8.encode(_controller.text),
       );
       if (path == null) return;
 
-      await File(path).writeAsString(_controller.text);
+      // Android's picker can return a URI-backed destination, not a normal
+      // filesystem path. FilePicker writes the supplied bytes itself.
+      String? localPath;
+      try {
+        if (await File(path).exists()) {
+          localPath = path;
+        }
+      } catch (_) {
+        // Keep the exported file, but don't treat a URI as a local path.
+      }
+
       if (mounted) {
         setState(() {
-          _filePath = path;
-          _workingDirectory = File(path).parent.path;
+          _filePath = localPath;
+          _workingDirectory =
+              localPath == null ? null : File(localPath).parent.path;
           _dirty = false;
-          _output = 'Сохранено как:\\n$_fileName';
+          _output = 'Файл экспортирован: undefined';
         });
       }
     } catch (error) {
-      _showMessage('Не удалось сохранить файл:\\n$error');
+      _showMessage('Не удалось сохранить файл:\n$error');
     }
   }
 
@@ -184,12 +197,23 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
+  int _pythonChecks = 0;
+
   void _startPython() {
     try {
-      SeriousPython.run();
+      // Surface asynchronous failures instead of leaving the status at "Запуск".
+      unawaited(
+        SeriousPython.run().catchError((Object error, StackTrace stack) {
+          if (mounted) {
+            setState(() {
+              _output = 'Не удалось запустить Python:\n$error';
+            });
+          }
+        }),
+      );
     } catch (error) {
       setState(() {
-        _output = 'Не удалось запустить Python:\\n$error';
+        _output = 'Не удалось запустить Python:\n$error';
       });
       return;
     }
@@ -214,8 +238,17 @@ class _TerminalScreenState extends State<TerminalScreen> {
         }
         _statusTimer?.cancel();
       }
-    } catch (_) {
-      // Python is still starting. Keep polling.
+    } catch (error) {
+      // Don't leave the user staring at "Запуск" forever if Python failed.
+      _pythonChecks++;
+      if (_pythonChecks >= 30 && mounted && !_pythonReady) {
+        _statusTimer?.cancel();
+        setState(() {
+          _output =
+              'Python не ответил за 12 секунд. Проверь подключение встроенного '
+              'Python в сборке и перезапусти приложение.\n$error';
+        });
+      }
     }
   }
 
