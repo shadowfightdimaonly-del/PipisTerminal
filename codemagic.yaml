@@ -10,6 +10,9 @@ workflows:
       - name: Prepare Flutter Android project
         script: |
           flutter create --platforms=android --org com.pipis.pipisterminal .
+          # The generated default test assumes a MyApp widget and a counter demo,
+          # neither of which exists in PipisTerminal.
+          rm -f test/widget_test.dart
       - name: Configure Android minimum SDK
         script: |
           python3 - <<'PY'
