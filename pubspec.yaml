@@ -1,7 +1,7 @@
 name: pipis_terminal
 description: PipisTerminal, a local Python coding terminal for Android.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  file_picker: ^9.2.3
   http: ^1.5.0
   path_provider: ^2.1.5
   serious_python: ^6.0.0
