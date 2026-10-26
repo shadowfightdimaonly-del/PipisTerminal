@@ -37,6 +37,29 @@ jobs:
           # Flutter generates a counter-app test that references the nonexistent MyApp.
           rm -f test/widget_test.dart
 
+      - name: Allow local Python bridge over loopback HTTP
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          content = manifest.read_text()
+          if 'android:usesCleartextTraffic=' in content:
+              content = re.sub(
+                  r'android:usesCleartextTraffic="[^"]*"',
+                  'android:usesCleartextTraffic="true"',
+                  content,
+              )
+          else:
+              content = content.replace(
+                  '<application',
+                  '<application android:usesCleartextTraffic="true"',
+                  1,
+              )
+          manifest.write_text(content)
+          PY
+
       - name: Set PipisTerminal launcher icon
         run: |
           python3 - <<'PY'
